@@ -2,6 +2,10 @@
 const { HfInference } = require('@huggingface/inference');
 const axios = require('axios');
 const xml2js = require('xml2js');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
 const hf = new HfInference(process.env.HF_API_KEY || undefined);
 
@@ -59,23 +63,29 @@ async function summarizeContent(content) {
     }
 }
 
-function personalizeResponse(summary, topic, sources) {
+async function personalizeResponse(summary, topic, sources) {
     const { name, interests } = userProfile;
-    let intro = `Greetings, ${name}! Prepare for an exquisite plunge into the abyss of ${topic}. `;
-    
-    if (interests.includes("cosmic stuff") && topic.toLowerCase().includes("black hole")) {
-        intro += "Your passion for the cosmos will find this utterly mesmerizing—";
-    } else if (interests.includes("tech") && topic.toLowerCase().includes("ai")) {
-        intro += "A tech savant like you will revel in this intricate weave—";
-    } else if (interests.includes("quantum vibes") && topic.toLowerCase().includes("quantum")) {
-        intro += "Your quantum curiosity is about to be richly rewarded—";
+
+    const prompt = `
+    You are an AI personalizing a research summary for ${name}. 
+    The topic is "${topic}". 
+    The user has the following interests: ${interests.join(", ")}.
+
+    Craft a concise and engaging personalized response that makes the topic feel relevant and interesting to the user.
+    The response should naturally incorporate the summary and mention sources where applicable.
+    Avoid generic introductions, unnecessary sections, or forced enthusiasm.
+    `;
+
+    try {
+        // const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+        const response = await model.generateContent({ contents: [{ role: "user", parts: [{ text: prompt }] }] });
+        return response.candidates[0]?.content?.parts[0]?.text?.trim() || summary;
+    } catch (error) {
+        console.error('AI personalization error:', error.message);
+        return summary;
     }
-
-    const [wikiPart, arXivPart] = summary.split(" Plus, the brainiacs say: ");
-    const sourceLines = sources.map(s => `  • *${s.name}*: [${s.link}](${s.link})`).join('\n');
-
-    return `${intro}\n\n\n**The Cosmic Essence**\n${wikiPart.trim()}\n\n\n**The Scholars’ Insight**\n${arXivPart ? arXivPart.trim() : "No arXiv wisdom this time—stay tuned for more cosmic revelations!"}\n\n\n**Sources to Explore**\n${sourceLines}`;
 }
+
 
 async function research(topic) {
     try {
@@ -109,8 +119,3 @@ async function research(topic) {
 
 module.exports = { research };
 
-if (require.main === module) {
-    (async () => {
-        console.log(await research("Black Holes"));
-    })();
-}

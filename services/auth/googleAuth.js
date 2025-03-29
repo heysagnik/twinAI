@@ -3,7 +3,6 @@ const fs = require('fs').promises;
 const path = require('path');
 const { authenticate } = require('@google-cloud/local-auth');
 
-// Combined scopes for Gmail and Calendar
 const SCOPES = [
   'https://www.googleapis.com/auth/gmail.readonly',
   'https://www.googleapis.com/auth/gmail.send',
@@ -11,24 +10,17 @@ const SCOPES = [
   'https://www.googleapis.com/auth/calendar.events'
 ];
 
-// Unified token path
-const TOKEN_PATH = path.join(process.cwd(), 'google_token.json');
-const CREDENTIALS_PATH = path.join(process.cwd(), 'credentials.json');
+// Use environment variable for token storage when available.  
+const TOKEN_PATH = process.env.GOOGLE_TOKEN_PATH || path.join(process.cwd(), 'google_token.json');
+const CREDENTIALS_PATH = process.env.GOOGLE_CREDENTIALS_PATH || path.join(process.cwd(), 'credentials.json');
+const REDIRECT_URL = process.env.GOOGLE_REDIRECT_URL || 'http://localhost:3000/auth/google/callback';
 
-// Frontend application URL for redirect after authentication
-const REDIRECT_URL = 'http://localhost:3000/auth/google/callback'; // Change to server callback
-
-// Cache for client instances
 let authClient = null;
 let gmailClient = null;
 let calendarClient = null;
 let lastClientRefresh = 0;
 const CLIENT_REFRESH_INTERVAL = 30 * 60 * 1000; // 30 minutes
 
-/**
- * Check if token file exists
- * @returns {Promise<boolean>} True if token exists
- */
 async function tokenExists() {
   try {
     await fs.access(TOKEN_PATH);
@@ -38,10 +30,6 @@ async function tokenExists() {
   }
 }
 
-/**
- * Get authentication URL for frontend to redirect to
- * @returns {Promise<string>} Authentication URL
- */
 async function getAuthUrl() {
   try {
     const content = await fs.readFile(CREDENTIALS_PATH);
@@ -57,7 +45,7 @@ async function getAuthUrl() {
     return oAuth2Client.generateAuthUrl({
       access_type: 'offline',
       scope: SCOPES,
-      prompt: 'consent' // Force to get refresh token
+      prompt: 'consent'
     });
   } catch (error) {
     console.error('Error generating auth URL:', error);
@@ -65,47 +53,35 @@ async function getAuthUrl() {
   }
 }
 
-/**
- * Get authenticated Google client with unified scopes
- * @param {boolean} skipBrowserAuth - If true, don't open browser for auth
- * @returns {Promise<Object|null>} OAuth2 client or null if auth needed
- */
 async function getAuthClient(skipBrowserAuth = false) {
   try {
     const now = Date.now();
-    
-    // Return cached client if valid
     if (authClient && (now - lastClientRefresh) < CLIENT_REFRESH_INTERVAL) {
       return authClient;
     }
     
     console.log('Initializing Google auth client...');
-    
-    // Try to load saved credentials
     let client = null;
     try {
       const content = await fs.readFile(TOKEN_PATH);
       const credentials = JSON.parse(content);
       client = google.auth.fromJSON(credentials);
-      console.log('Loaded existing token from google_token.json');
+      console.log('Loaded existing token from', TOKEN_PATH);
     } catch (err) {
       console.log('No saved token found.');
-      
       if (skipBrowserAuth) {
         console.log('Skipping browser auth as requested.');
         return null;
       }
     }
-
+    
     if (!client && !skipBrowserAuth) {
-      // Authenticate with browser flow if no saved credentials
       client = await authenticate({
         scopes: SCOPES,
         keyfilePath: CREDENTIALS_PATH,
         redirectUri: REDIRECT_URL
       });
       
-      // Save credentials for future use
       if (client.credentials) {
         const keys = JSON.parse(await fs.readFile(CREDENTIALS_PATH));
         const key = keys.installed || keys.web;
@@ -116,15 +92,13 @@ async function getAuthClient(skipBrowserAuth = false) {
           refresh_token: client.credentials.refresh_token,
         });
         await fs.writeFile(TOKEN_PATH, payload);
-        console.log('Token saved to google_token.json');
+        console.log('Token saved to', TOKEN_PATH);
       }
     }
     
     if (client) {
       authClient = client;
       lastClientRefresh = now;
-      
-      // Reset service clients to force recreation with new auth
       gmailClient = null;
       calendarClient = null;
     }
@@ -136,11 +110,6 @@ async function getAuthClient(skipBrowserAuth = false) {
   }
 }
 
-/**
- * Get Gmail client using unified auth
- * @param {boolean} skipBrowserAuth - If true, don't open browser for auth
- * @returns {Promise<Object|null>} Gmail client or null if auth needed
- */
 async function getGmailClient(skipBrowserAuth = false) {
   if (gmailClient) return gmailClient;
   
@@ -151,11 +120,6 @@ async function getGmailClient(skipBrowserAuth = false) {
   return gmailClient;
 }
 
-/**
- * Get Calendar client using unified auth
- * @param {boolean} skipBrowserAuth - If true, don't open browser for auth
- * @returns {Promise<Object|null>} Calendar client or null if auth needed
- */
 async function getCalendarClient(skipBrowserAuth = false) {
   if (calendarClient) return calendarClient;
   
@@ -166,11 +130,6 @@ async function getCalendarClient(skipBrowserAuth = false) {
   return calendarClient;
 }
 
-/**
- * Exchange authorization code for tokens
- * @param {string} code - Authorization code from Google
- * @returns {Promise<Object>} Auth client
- */
 async function exchangeCodeForTokens(code) {
   try {
     const content = await fs.readFile(CREDENTIALS_PATH);
@@ -186,7 +145,6 @@ async function exchangeCodeForTokens(code) {
     const { tokens } = await oAuth2Client.getToken(code);
     oAuth2Client.setCredentials(tokens);
     
-    // Save the token
     const payload = JSON.stringify({
       type: 'authorized_user',
       client_id: key.client_id,
@@ -197,9 +155,8 @@ async function exchangeCodeForTokens(code) {
     });
     
     await fs.writeFile(TOKEN_PATH, payload);
-    console.log('Token saved to google_token.json');
+    console.log('Token saved to', TOKEN_PATH);
     
-    // Reset clients
     authClient = oAuth2Client;
     gmailClient = null;
     calendarClient = null;

@@ -1,0 +1,127 @@
+body {
+    font-family: 'Arial', sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #1a1a1a; /* Dark gray-black */
+    color: #e0e0e0; /* Light gray text */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+}
+
+#chat-container {
+    width: 100%;
+    max-width: 700px;
+    background: #2a2a2a; /* Slightly lighter dark */
+    border-radius: 15px;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+header {
+    padding: 15px 20px;
+    background: #333;
+    border-bottom: 1px solid #444;
+    text-align: center;
+}
+
+header h1 {
+    margin: 0;
+    font-size: 24px;
+    color: #00ccff; /* Bright cyan for sci-fi vibe */
+}
+
+header p {
+    margin: 5px 0 0;
+    font-size: 14px;
+    color: #aaa;
+}
+
+#chat-window {
+    flex-grow: 1;
+    padding: 20px;
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+.message {
+    margin: 10px 0;
+    padding: 10px 15px;
+    border-radius: 10px;
+    max-width: 80%;
+    word-wrap: break-word;
+}
+
+.user-message {
+    background: #007bff; /* Blue for user */
+    color: white;
+    margin-left: auto;
+    text-align: right;
+}
+
+.ai-message {
+    background: #444; /* Dark gray for AI */
+    color: #e0e0e0;
+    margin-right: auto;
+}
+
+.loading {
+    opacity: 0.7;
+    font-style: italic;
+}
+
+#input-area {
+    display: flex;
+    padding: 15px;
+    background: #333;
+    border-top: 1px solid #444;
+}
+
+#userInput {
+    flex-grow: 1;
+    padding: 10px;
+    border: none;
+    border-radius: 5px 0 0 5px;
+    background: #555;
+    color: #e0e0e0;
+    outline: none;
+}
+
+#userInput::placeholder {
+    color: #aaa;
+}
+
+button {
+    padding: 10px 20px;
+    background: #00ccff; /* Cyan button */
+    color: #1a1a1a;
+    border: none;
+    border-radius: 0 5px 5px 0;
+    cursor: pointer;
+    transition: background 0.3s;
+}
+
+button:hover {
+    background: #00aaff;
+}
+
+/* Scrollbar styling for a sleek look */
+#chat-window::-webkit-scrollbar {
+    width: 8px;
+}
+
+#chat-window::-webkit-scrollbar-track {
+    background: #2a2a2a;
+}
+
+#chat-window::-webkit-scrollbar-thumb {
+    background: #555;
+    border-radius: 4px;
+}
+
+#chat-window::-webkit-scrollbar-thumb:hover {
+    background: #777;
+}

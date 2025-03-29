@@ -1,8 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const TwinController = require('../controllers/twinController');
-
-const twinController = new TwinController();
+const twinController = require('../controllers/twinController');
 
 // Route to create a digital twin
 router.post('/create', twinController.createDigitalTwin);

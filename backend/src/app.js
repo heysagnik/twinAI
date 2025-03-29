@@ -3,7 +3,7 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const apiRoutes = require('./routes/api');
 const { errorHandler } = require('./middleware/errorHandler');
-const { connectDB } = require('./config/env');
+const connectDB = require('./config/db');
 
 const app = express();
 
@@ -21,5 +21,4 @@ app.use('/api', apiRoutes);
 // Error handling middleware
 app.use(errorHandler);
 
-// Export the app for use in index.js
 module.exports = app;

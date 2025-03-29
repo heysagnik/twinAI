@@ -1,8 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const TodoController = require('../controllers/todoController');
-
-const todoController = new TodoController();
+const todoController = require('../controllers/todoController');
 
 // Route to create a new to-do item
 router.post('/todos', todoController.createTodo);

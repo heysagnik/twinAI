@@ -1,22 +1,12 @@
 const express = require('express');
+const MeetingController = require('../controllers/meetingController.js');
 const router = express.Router();
-const MeetingController = require('../controllers/meetingController');
 
+// Instantiate MeetingController (pass meetingService if needed)
 const meetingController = new MeetingController();
 
-// Route to schedule a meeting
-router.post('/schedule', meetingController.scheduleMeeting);
-
-// Route to set a reminder for a meeting
-router.post('/reminder', meetingController.setReminder);
-
-// Route to retrieve all scheduled meetings
-router.get('/', meetingController.getAllMeetings);
-
-// Route to retrieve a specific meeting by ID
-router.get('/:id', meetingController.getMeetingById);
-
-// Route to delete a meeting by ID
-router.delete('/:id', meetingController.deleteMeeting);
+// Use POST endpoints (or get if that is intended) and bind the controller methods
+router.post('/schedule', meetingController.scheduleMeeting.bind(meetingController));
+router.post('/reminder', meetingController.setReminder.bind(meetingController));
 
 module.exports = router;

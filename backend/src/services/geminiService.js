@@ -1,5 +1,5 @@
-import axios from 'axios';
-import config from '../config/gemini';
+const axios = require('axios');
+const config = require('../config/gemini');
 
 const GeminiService = {
     scheduleMeeting: async (meetingDetails) => {
@@ -55,4 +55,4 @@ const GeminiService = {
     }
 };
 
-export default GeminiService;
+module.exports = GeminiService;

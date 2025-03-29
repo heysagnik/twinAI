@@ -24,4 +24,4 @@ class MeetingController {
     }
 }
 
-export default MeetingController;
+module.exports = MeetingController;

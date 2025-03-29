@@ -1,4 +1,4 @@
-import { GeminiService } from '../services/geminiService';
+const { GeminiService } = require('../services/geminiService');
 
 class TwinController {
     async createDigitalTwin(req, res) {
@@ -10,36 +10,76 @@ class TwinController {
             res.status(500).json({ success: false, message: error.message });
         }
     }
-
+    
+    async getDigitalTwin(req, res) {
+        try {
+            const userId = req.params.userId;
+            // Dummy data retrieval: replace with actual logic
+            res.status(200).json({ success: true, data: { userId, twin: "sample data" } });
+        } catch (error) {
+            res.status(500).json({ success: false, message: error.message });
+        }
+    }
+    
+    async updateDigitalTwin(req, res) {
+        try {
+            const userId = req.params.userId;
+            // Dummy logic: replace with actual update logic
+            res.status(200).json({ success: true, message: `Digital twin for ${userId} updated` });
+        } catch (error) {
+            res.status(500).json({ success: false, message: error.message });
+        }
+    }
+    
+    async deleteDigitalTwin(req, res) {
+        try {
+            const userId = req.params.userId;
+            // Dummy logic: replace with actual delete logic
+            res.status(200).json({ success: true, message: `Digital twin for ${userId} deleted` });
+        } catch (error) {
+            res.status(500).json({ success: false, message: error.message });
+        }
+    }
+    
+    async learnFromUserBehavior(req, res) {
+        try {
+            const userId = req.params.userId;
+            // Dummy logic: replace with actual learning logic
+            res.status(200).json({ success: true, message: `Learned from user ${userId}'s behavior` });
+        } catch (error) {
+            res.status(500).json({ success: false, message: error.message });
+        }
+    }
+    
     async scheduleMeeting(req, res) {
         try {
             const { dateTime, participants } = req.body;
-            const meetingDetails = await GeminiService.scheduleMeeting(dateTime, participants);
+            const meetingDetails = await GeminiService.scheduleMeeting({ dateTime, participants });
             res.status(200).json({ success: true, data: meetingDetails });
         } catch (error) {
             res.status(500).json({ success: false, message: error.message });
         }
     }
-
+    
     async retrieveUnreadEmails(req, res) {
         try {
-            const unreadEmails = await GeminiService.getUnreadEmails(req.user.id);
+            const unreadEmails = await GeminiService.retrieveUnreadEmails(req.user.id);
             res.status(200).json({ success: true, data: unreadEmails });
         } catch (error) {
             res.status(500).json({ success: false, message: error.message });
         }
     }
-
+    
     async generateEmailResponse(req, res) {
         try {
             const { emailContent } = req.body;
-            const response = await GeminiService.generateEmailResponse(emailContent);
+            const response = await GeminiService.generatePersonalizedEmailResponse(emailContent);
             res.status(200).json({ success: true, data: response });
         } catch (error) {
             res.status(500).json({ success: false, message: error.message });
         }
     }
-
+    
     async createToDoList(req, res) {
         try {
             const { tasks } = req.body;
@@ -51,4 +91,4 @@ class TwinController {
     }
 }
 
-export default new TwinController();
+module.exports = new TwinController();

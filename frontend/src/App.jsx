@@ -248,22 +248,7 @@ export default function App() {
                           {chat.llmResponse}
                         </div>
                         
-                        {/* Response actions */}
-                        {chat.llmResponse !== "..." && (
-                          <div className="mt-3 flex items-center gap-4 text-xs text-gray-400">
-                            <button 
-                              onClick={() => copyToClipboard(chat.llmResponse)}
-                              className="hover:text-gray-200 flex items-center gap-1.5 transition-colors"
-                            >
-                              <Copy size={14} />
-                              Copy
-                            </button>
-                            <button className="hover:text-gray-200 flex items-center gap-1.5 transition-colors">
-                              <RefreshCw size={14} />
-                              Regenerate
-                            </button>
-                          </div>
-                        )}
+                        
                       </div>
                     </div>
                   </div>

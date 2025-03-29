@@ -3,21 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Grok Vibes</title>
+    <title>Twizzy Twin</title>
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 <body>
     <div id="chat-container">
         <header>
-            <h1>YSL Vibes</h1>
-            <p>Your cosmic assistant, powered by xAI vibes</p>
+            <h1>Twizzy Twin</h1>
+            <p>Your twin assistant, powered by opium vibes</p>
         </header>
         <div id="chat-window">
-            <div class="message ai-message">Yo, I’m your Twin AI. What’s the vibe?</div>
+            <div class="message ai-message">Yo, I'm your Twin AI. What's the vibe?</div>
         </div>
         <div id="input-area">
             <input type="text" id="userInput" placeholder="Ask me anything, human..." autocomplete="off">
-            <button onclick="sendMessage()">Send</button>
+            <button onclick="sendMessage()">
+                <i class="fas fa-paper-plane"></i>
+            </button>
         </div>
     </div>
     <script>
@@ -27,7 +30,11 @@
 
             const chatWindow = document.getElementById('chat-window');
             chatWindow.innerHTML += `<div class="message user-message">${input}</div>`;
-            chatWindow.innerHTML += `<div class="message ai-message loading">Processing the cosmic query...</div>`;
+            chatWindow.innerHTML += `<div class="message ai-message loading">
+                <span class="dot"></span>
+                <span class="dot"></span>
+                <span class="dot"></span>
+            </div>`;
             chatWindow.scrollTop = chatWindow.scrollHeight;
 
             try {
@@ -50,7 +57,7 @@
             } catch (error) {
                 const loadingMsg = chatWindow.querySelector('.loading');
                 if (loadingMsg) loadingMsg.remove();
-                chatWindow.innerHTML += `<div class="message ai-message">Oops, hit a glitch: ${error.message}</div>`;
+                chatWindow.innerHTML += `<div class="message ai-message error">Oops, hit a glitch: ${error.message}</div>`;
             }
 
             document.getElementById('userInput').value = '';
@@ -60,6 +67,11 @@
         document.getElementById('userInput').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') sendMessage();
         });
+        
+        // Focus input on load
+        window.onload = function() {
+            document.getElementById('userInput').focus();
+        };
     </script>
 </body>
 </html>

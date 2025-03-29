@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import { ArrowUp, Mic } from "lucide-react";
+import { ArrowUp, Mic, LogOut } from "lucide-react";
+import { useAuth } from "./AuthContext";
 
 export default function App() {
   const [message, setMessage] = useState("");
@@ -11,9 +12,9 @@ export default function App() {
   const [sessionId, setSessionId] = useState("");
   const messagesEndRef = useRef(null);
   const dropdownRef = useRef(null);
+  const { logout } = useAuth();
 
   useEffect(() => {
-    // Initialize or retrieve sessionId
     const storedSessionId = localStorage.getItem("twinAI_sessionId");
     if (storedSessionId) {
       setSessionId(storedSessionId);
@@ -23,7 +24,6 @@ export default function App() {
       setSessionId(newSessionId);
     }
     
-    // Close dropdown when clicking outside
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setShowDropdown(false);
@@ -34,7 +34,6 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    // Load conversation history when sessionId is available
     if (sessionId) {
       fetchConversationHistory();
     }
@@ -56,13 +55,8 @@ export default function App() {
       const response = await axios.get(`http://localhost:3000/history/${sessionId}?limit=50`);
       
       if (response.data.history && response.data.history.length > 0) {
-        // Convert MongoDB message format to the app's chat format
         const formattedChats = [];
-        
-        // Group messages into user-assistant pairs
         let currentUserMessage = null;
-        
-        // Process messages in reverse to get chronological order (oldest first)
         const sortedMessages = [...response.data.history].sort((a, b) => 
           new Date(a.timestamp) - new Date(b.timestamp)
         );
@@ -79,7 +73,6 @@ export default function App() {
           }
         }
         
-        // If there's a hanging user message without a response
         if (currentUserMessage) {
           formattedChats.push({
             userMessage: currentUserMessage,
@@ -97,7 +90,6 @@ export default function App() {
   };
 
   const startNewChat = () => {
-    // Generate a new session ID for a new chat
     const newSessionId = "session_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9);
     localStorage.setItem("twinAI_sessionId", newSessionId);
     setSessionId(newSessionId);
@@ -118,7 +110,6 @@ export default function App() {
         sessionId 
       });
   
-      // Replace placeholder with actual response
       setChats((prevChats) =>
         prevChats.map((chat, index) =>
           index === prevChats.length - 1
@@ -128,7 +119,6 @@ export default function App() {
       );
     } catch (error) {
       console.error("Error:", error);
-      // Update UI to show error
       setChats((prevChats) =>
         prevChats.map((chat, index) =>
           index === prevChats.length - 1
@@ -145,7 +135,6 @@ export default function App() {
 
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
-    // You could add a toast notification here
   };
 
   const clearConversation = () => {
@@ -154,7 +143,6 @@ export default function App() {
   
   return (
     <div className="flex flex-col min-h-screen h-full bg-black text-white">
-      {/* Top bar with avatar */}
       <div className="fixed top-0 right-0 p-4 z-50">
         <div className="relative" ref={dropdownRef}>
           <button 
@@ -183,13 +171,17 @@ export default function App() {
                 Clear Conversation
               </button>
               <a href="#" className="block px-4 py-2 text-sm text-gray-300 hover:bg-[#2a2a2a]">Help</a>
-              <a href="#" className="block px-4 py-2 text-sm text-gray-300 hover:bg-[#2a2a2a]">Sign out</a>
+              <button 
+                onClick={logout}
+                className="block w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-[#2a2a2a]"
+              >
+                Sign out
+              </button>
             </div>
           )}
         </div>
       </div>
 
-      {/* Main content area */}
       <div className="flex-1 flex flex-col bg-black">
         {chats.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center p-8 pb-32">
@@ -228,27 +220,22 @@ export default function App() {
             </div>
           </div>
         ) : (
-          <div className="flex-1 flex flex-col pt-16 pb-32"> {/* Added padding-bottom for floating input */}
-            {/* Chat messages */}
+          <div className="flex-1 flex flex-col pt-16 pb-32">
             <div className="flex-1 overflow-y-auto">
               <div className="max-w-3xl mx-auto py-8 px-4">
                 {chats.map((chat, index) => (
                   <div key={index} className="mb-8">
-                    {/* User Message */}
                     <div className="mb-6 flex justify-end">
                       <div className="bg-gradient-to-r from-[#0a84ff] to-[#4293ff] px-5 py-3 rounded-2xl rounded-tr-md max-w-[80%] shadow-sm">
                         <p className="text-white text-[15px] leading-snug">{chat.userMessage}</p>
                       </div>
                     </div>
                     
-                    {/* AI Response */}
                     <div className="flex">
                       <div className="bg-[#262626] px-5 py-3 rounded-2xl rounded-tl-md max-w-[80%] shadow-sm border border-[#333333]">
                         <div className={`text-[15px] leading-snug ${chat.llmResponse === "..." ? "animate-pulse" : ""}`}>
                           {chat.llmResponse}
                         </div>
-                        
-                        
                       </div>
                     </div>
                   </div>
@@ -257,7 +244,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Floating input area at the bottom */}
             <div className="fixed bottom-0 left-0 right-0 p-4 z-10 bg-black border-t border-gray-800">
               <div className="max-w-3xl mx-auto">
                 <form 

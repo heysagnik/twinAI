@@ -4,13 +4,18 @@ const express = require('express');
 const cors = require('cors');
 const chatService = require('./services/chat');
 const connectDB = require('./db/connection');
+const cookieParser = require('cookie-parser'); // Added cookie-parser
 
 // Connect to MongoDB
 connectDB();
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: 'http://localhost:5173',
+  credentials: true  // Allow cookies in CORS
+}));
 app.use(express.json());
+app.use(cookieParser()); // Use cookie-parser
 
 // Serve static files
 app.use(express.static('public'));
@@ -38,19 +43,36 @@ app.get('/history/:sessionId', async (req, res) => {
 
 // Add auth endpoint to handle Google OAuth redirects
 app.get('/auth/google/callback', (req, res) => {
-    // After successful authentication, redirect to the frontend
+    // Set auth cookie after successful authentication
+    res.cookie('googleAuthToken', 'authenticated', {
+        httpOnly: true,
+        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax'
+    });
+    
+    // Redirect to the frontend
     res.redirect('http://localhost:5173');
 });
 
 // Also add a route to check auth status
 app.get('/auth/status', async (req, res) => {
     try {
-        const { getAuthClient } = require('./services/auth/googleAuth');
-        const authClient = await getAuthClient();
+        // Check if we have a valid auth cookie
+        const authCookie = req.cookies.googleAuthToken;
         
-        if (authClient) {
-            // Check if token is valid by making a test request
-            try {
+        if (!authCookie) {
+            return res.json({ authenticated: false, reason: "no_cookie" });
+        }
+        
+        const { getAuthClient } = require('./services/auth/googleAuth');
+        
+        try {
+            const authClient = await getAuthClient();
+            
+            if (authClient) {
+                // Verify token is valid with a test request
+                const { getCalendarClient } = require('./services/auth/googleAuth');
                 const calendar = await getCalendarClient();
                 await calendar.calendarList.list({ maxResults: 1 });
                 
@@ -61,15 +83,18 @@ app.get('/auth/status', async (req, res) => {
                         calendar: true
                     }
                 });
-            } catch (error) {
-                // Authentication token exists but might be invalid
-                res.json({ 
-                    authenticated: false,
-                    error: "Invalid or expired token"
-                });
+            } else {
+                res.clearCookie('googleAuthToken');
+                res.json({ authenticated: false, reason: "invalid_token" });
             }
-        } else {
-            res.json({ authenticated: false });
+        } catch (error) {
+            // Authentication token exists but might be invalid
+            res.clearCookie('googleAuthToken');
+            res.json({ 
+                authenticated: false,
+                reason: "token_error",
+                error: "Invalid or expired token"
+            });
         }
     } catch (error) {
         console.error('Error checking auth status:', error);
@@ -83,10 +108,17 @@ app.get('/auth/status', async (req, res) => {
 // Route to initiate authentication
 app.get('/auth/google', async (req, res) => {
     try {
+        // Check if already authenticated via cookie
+        if (req.cookies.googleAuthToken) {
+            return res.redirect('http://localhost:5173');
+        }
+        
         const { getAuthClient } = require('./services/auth/googleAuth');
-        // This will trigger the auth flow if not authenticated
+        // This will trigger the auth flow
         await getAuthClient();
-        res.redirect('http://localhost:5173');
+        
+        // Note: The actual cookie will be set in the callback route
+        // This redirect might not happen if auth flow redirects to Google
     } catch (error) {
         console.error('Auth error:', error);
         res.status(500).send('Authentication failed');
@@ -107,6 +139,9 @@ app.get('/auth/logout', async (req, res) => {
         } catch (error) {
             console.log('No token file found to delete');
         }
+        
+        // Clear the auth cookie
+        res.clearCookie('googleAuthToken');
         
         // Redirect back to the frontend
         res.redirect('http://localhost:5173');

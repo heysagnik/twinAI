@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import { ArrowUp, Plus, Search, ChevronDown, RefreshCw, Copy, Home, Globe, Layers, BookOpen, Mic, Mic2 } from "lucide-react";
+import { ArrowUp, Mic } from "lucide-react";
 
 export default function App() {
   const [message, setMessage] = useState("");

@@ -207,7 +207,7 @@ export default function App() {
                   placeholder="Ask anything..."
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
-                  className="w-full bg-black rounded-full py-4 px-6 pr-32 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-600"
+                  className="w-full bg-[#1a1a1a] rounded-full py-4 px-6 pr-32 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-600"
                 />
                 <div className="absolute right-2 top-2 flex items-center gap-2">
                   <button 
@@ -272,7 +272,7 @@ export default function App() {
                     placeholder="Ask a follow-up question..."
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
-                    className="w-full bg-black rounded-full py-4 px-6 pr-32 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-600 shadow-lg"
+                    className="w-full bg-[#1a1a1a] rounded-full py-4 px-6 pr-32 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-600 shadow-lg"
                   />
                   <div className="absolute right-2 top-2 flex items-center gap-2">
                     <button 

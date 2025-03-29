@@ -3,8 +3,8 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { google } = require('googleapis');
 const fs = require('fs').promises;
 const path = require('path');
-const { authenticate } = require('@google-cloud/local-auth');
 const { sendEmail } = require('./email');
+const { getGmailClient } = require('./auth/googleAuth');
 require('dotenv').config();
 
 // Cache implementation for API responses
@@ -15,10 +15,6 @@ const styleCacheExpiry = 60 * 60 * 1000; // 1 hour cache for style analysis
 let gmailClientInstance = null;
 let lastGmailClientRefresh = 0;
 const GMAIL_CLIENT_REFRESH_INTERVAL = 30 * 60 * 1000; // 30 minutes
-
-const SCOPES = ['https://www.googleapis.com/auth/gmail.readonly'];
-const TOKEN_PATH = path.join(process.cwd(), 'token.json');
-const CREDENTIALS_PATH = path.join(process.cwd(), 'credentials.json');
 
 // Initialize Gemini API
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -36,60 +32,6 @@ let emailState = {
     styleAnalysis: null
   }
 };
-
-/**
- * Get Gmail client with connection pooling
- * @returns {Promise<Object>} Gmail client
- */
-async function getGmailClient() {
-  try {
-    const now = Date.now();
-    
-    // Return cached client if valid
-    if (gmailClientInstance && (now - lastGmailClientRefresh) < GMAIL_CLIENT_REFRESH_INTERVAL) {
-      return gmailClientInstance;
-    }
-    
-    // First try to load saved credentials
-    let client = null;
-    try {
-      const content = await fs.readFile(TOKEN_PATH);
-      const credentials = JSON.parse(content);
-      client = google.auth.fromJSON(credentials);
-    } catch (err) {
-      console.log('No saved token found. Authenticating with new flow...');
-    }
-
-    if (!client) {
-      // If no saved credentials, authenticate with new flow
-      client = await authenticate({
-        scopes: SCOPES,
-        keyfilePath: CREDENTIALS_PATH,
-      });
-      
-      // Save credentials for future use
-      if (client.credentials) {
-        const keys = JSON.parse(await fs.readFile(CREDENTIALS_PATH));
-        const key = keys.installed || keys.web;
-        const payload = JSON.stringify({
-          type: 'authorized_user',
-          client_id: key.client_id,
-          client_secret: key.client_secret,
-          refresh_token: client.credentials.refresh_token,
-        });
-        await fs.writeFile(TOKEN_PATH, payload);
-      }
-    }
-    
-    gmailClientInstance = google.gmail({ version: 'v1', auth: client });
-    lastGmailClientRefresh = now;
-    
-    return gmailClientInstance;
-  } catch (error) {
-    console.error('Error getting Gmail client:', error);
-    return null;
-  }
-}
 
 /**
  * Search emails with pagination, batching and caching

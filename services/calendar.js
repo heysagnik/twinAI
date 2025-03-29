@@ -11,18 +11,12 @@ const schedulingFlow = require('./calendar/schedulingFlow');
 const dateUtils = require('./utils/dateUtils');
 const parsingUtils = require('./utils/parsingUtils');
 const cacheManager = require('./utils/cacheManager');
+// Import universal Google auth
+const { getCalendarClient } = require('./auth/googleAuth');
 
 // Initialize the Gemini AI model
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-
-// Configuration constants
-const CALENDAR_CONFIG = {
-  SCOPES: ['https://www.googleapis.com/auth/calendar'],
-  TOKEN_PATH: path.join(process.cwd(), 'calendar_token.json'),
-  CREDENTIALS_PATH: path.join(process.cwd(), 'credentials.json'),
-  CLIENT_REFRESH_INTERVAL: 30 * 60 * 1000 // 30 minutes
-};
 
 // Initialize modules that have an initialize function
 if (parsingUtils.initialize) {
@@ -38,16 +32,16 @@ async function checkCredentials() {
   try {
     // Check if credentials file exists
     try {
-      await fs.access(CALENDAR_CONFIG.CREDENTIALS_PATH);
-      console.log('Google Calendar credentials file found');
+      await fs.access(path.join(process.cwd(), 'credentials.json'));
+      console.log('Google credentials file found');
     } catch (err) {
-      console.error('ERROR: Google Calendar credentials file not found at:', CALENDAR_CONFIG.CREDENTIALS_PATH);
+      console.error('ERROR: Google credentials file not found at:', path.join(process.cwd(), 'credentials.json'));
       console.error('Please download OAuth credentials from Google Cloud Console and save them as credentials.json');
       return false;
     }
     
     // Try to get a calendar client as a test
-    const client = await calendarClient.getCalendarClient();
+    const client = await getCalendarClient();
     if (!client) {
       console.error('ERROR: Failed to create Google Calendar client');
       return false;
@@ -212,14 +206,23 @@ async function fetchEventsAroundToday() {
     console.log(`Date range: ${start.toISOString()} to ${end.toISOString()}`);
     
     // Make sure we can get a client first
-    const client = await calendarClient.getCalendarClient();
+    const client = await getCalendarClient();
     if (!client) {
       console.error('ERROR: Could not obtain calendar client');
       return [];
     }
     
-    // Fetch events
-    const events = await calendarClient.getCalendarEvents(start, end);
+    // Fetch events using unified auth client
+    const response = await client.events.list({
+      calendarId: 'primary',
+      timeMin: start.toISOString(),
+      timeMax: end.toISOString(),
+      singleEvents: true,
+      orderBy: 'startTime',
+      maxResults: 100
+    });
+    
+    const events = response.data.items || [];
     
     console.log(`Found ${events.length} events in the 5-day window.`);
     // Log full details for debugging
@@ -257,8 +260,7 @@ async function fetchEventsAroundToday() {
 // Export the composed service
 module.exports = {
   // Calendar client operations
-  getCalendarClient: calendarClient.getCalendarClient,
-  getCalendarEvents: calendarClient.getCalendarEvents,
+  getCalendarClient,
   
   // Event operations
   createCalendarEvent: eventOperations.createCalendarEvent,

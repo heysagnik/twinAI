@@ -48,10 +48,17 @@
                 // Remove loading message and add response
                 const loadingMsg = chatWindow.querySelector('.loading');
                 if (loadingMsg) loadingMsg.remove();
-                chatWindow.innerHTML += `<div class="message ai-message">${data.response}</div>`;
+                
+                // Ensure response is a string
+                const responseText = typeof data.response === 'string' 
+                    ? data.response 
+                    : JSON.stringify(data.response);
+                
+                chatWindow.innerHTML += `<div class="message ai-message">${responseText}</div>`;
                 chatWindow.scrollTop = chatWindow.scrollHeight;
 
-                if (data.response.includes('Peace out!')) {
+                // Check for exit intent in a safer way
+                if (responseText && responseText.includes && responseText.includes('Peace out!')) {
                     document.getElementById('input-area').style.display = 'none';
                 }
             } catch (error) {

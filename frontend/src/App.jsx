@@ -153,7 +153,7 @@ export default function App() {
   };
   
   return (
-    <div className="flex flex-col h-screen bg-[#0f0f0f] text-white">
+    <div className="flex flex-col min-h-screen h-full bg-black text-white">
       {/* Top bar with avatar */}
       <div className="fixed top-0 right-0 p-4 z-50">
         <div className="relative" ref={dropdownRef}>
@@ -165,7 +165,7 @@ export default function App() {
           </button>
           
           {showDropdown && (
-            <div className="absolute right-0 mt-2 w-48 bg-[#1a1a1a] border border-gray-800 rounded-lg shadow-lg py-1">
+            <div className="absolute right-0 mt-2 w-48 bg-black border border-gray-800 rounded-lg shadow-lg py-1">
               <div className="px-4 py-3 border-b border-gray-800">
                 <p className="text-sm font-medium">User</p>
                 <p className="text-xs text-gray-400 truncate">{sessionId}</p>
@@ -190,7 +190,7 @@ export default function App() {
       </div>
 
       {/* Main content area */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col bg-black">
         {chats.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center p-8 pb-32">
             <h1 className="text-4xl font-semibold mb-8">What do you want to know?</h1>
@@ -207,7 +207,7 @@ export default function App() {
                   placeholder="Ask anything..."
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
-                  className="w-full bg-[#1a1a1a] rounded-full py-4 px-6 pr-32 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-600"
+                  className="w-full bg-black rounded-full py-4 px-6 pr-32 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-600"
                 />
                 <div className="absolute right-2 top-2 flex items-center gap-2">
                   <button 
@@ -273,7 +273,7 @@ export default function App() {
             </div>
 
             {/* Floating input area at the bottom */}
-            <div className="fixed bottom-0 left-0 right-0 p-4 z-10 bg-[#0f0f0f] border-t border-gray-800">
+            <div className="fixed bottom-0 left-0 right-0 p-4 z-10 bg-black border-t border-gray-800">
               <div className="max-w-3xl mx-auto">
                 <form 
                   onSubmit={(e) => {
@@ -287,7 +287,7 @@ export default function App() {
                     placeholder="Ask a follow-up question..."
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
-                    className="w-full bg-[#1a1a1a] rounded-full py-4 px-6 pr-32 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-600 shadow-lg"
+                    className="w-full bg-black rounded-full py-4 px-6 pr-32 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-600 shadow-lg"
                   />
                   <div className="absolute right-2 top-2 flex items-center gap-2">
                     <button 

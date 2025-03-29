@@ -3,6 +3,10 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { research } = require('./research');
 const { scheduleEvent } = require('./calendar');
 const { sendEmail } = require('./email');
+const { google } = require('googleapis');
+const fs = require('fs').promises;
+const path = require('path');
+const { authenticate } = require('@google-cloud/local-auth');
 require('dotenv').config();
 
 // Initialize Gemini API
@@ -208,37 +212,104 @@ async function analyzeSentiment(text) {
 // Add after analyzeSentiment
 async function analyzeEmailHistory(recipient) {
     try {
-        // Mock email service for demonstration purposes
-        // In production, replace with actual email API calls (Gmail, Outlook, etc.)
+        // Use Gmail API to fetch actual email history
+
         const fetchEmailHistory = async (recipient) => {
             try {
             console.log(`Fetching email history for recipient: ${recipient}`);
             
-            // In production, replace this with actual API integration:
-            // const client = await authenticateEmailClient();
-            // return await client.fetchEmails({
-            //     to: recipient,
-            //     limit: 10,
-            //     orderBy: 'date desc'
-            // });
+            // Gmail API setup - configure these paths according to your project
+            const CREDENTIALS_PATH = path.join(process.cwd(), 'credentials.json');
+            const TOKEN_PATH = path.join(process.cwd(), 'token.json');
+            const SCOPES = ['https://www.googleapis.com/auth/gmail.readonly'];
             
-            // Determine domain type for mock data
-            const domain = recipient.split('@')[1] || '';
-            const isBusiness = !domain.includes('gmail') && 
-                      !domain.includes('yahoo') && 
-                      !domain.includes('hotmail');
+            let client;
             
-            // Return mock data for demonstration
-            return {
-                success: true,
-                emails: Array(3).fill().map((_, i) => ({
-                subject: isBusiness ? `Project Update ${i+1}` : `Weekend plans ${i+1}`,
-                body: isBusiness ? 
-                    `Dear recipient,\n\nPlease find attached the latest updates for the project.\n\nBest regards,\nSender` : 
-                    `Hey!\n\nWhat are you up to this weekend? Want to hang out?\n\nCheers,\nSender`,
-                date: new Date(Date.now() - i * 86400000).toISOString()
-                }))
-            };
+            // Check if we have a stored token
+            try {
+                const content = await fs.readFile(TOKEN_PATH);
+                const credentials = JSON.parse(content);
+                client = google.auth.fromJSON(credentials);
+            } catch (err) {
+                // No stored token, authenticate user
+                client = await authenticate({
+                scopes: SCOPES,
+                keyfilePath: CREDENTIALS_PATH,
+                });
+                
+                // Save token for future use
+                const content = await fs.readFile(CREDENTIALS_PATH);
+                const keys = JSON.parse(content);
+                const key = keys.installed || keys.web;
+                const payload = JSON.stringify({
+                type: 'authorized_user',
+                client_id: key.client_id,
+                client_secret: key.client_secret,
+                refresh_token: client.credentials.refresh_token,
+                });
+                await fs.writeFile(TOKEN_PATH, payload);
+            }
+            
+            // Create Gmail API client
+            const gmail = google.gmail({ version: 'v1', auth: client });
+            
+            // Search for emails to/from the recipient
+            const query = `to:${recipient} OR from:${recipient}`;
+            const response = await gmail.users.messages.list({
+                userId: 'me',
+                q: query,
+                maxResults: 10,
+            });
+            
+            // If no messages found
+            if (!response.data.messages || response.data.messages.length === 0) {
+                return { success: true, emails: [] };
+            }
+            
+            // Get details for each message
+            const emails = await Promise.all(
+                response.data.messages.map(async (message) => {
+                const details = await gmail.users.messages.get({
+                    userId: 'me',
+                    id: message.id,
+                    format: 'full',
+                });
+                
+                // Extract email details
+                const headers = details.data.payload.headers;
+                const subject = headers.find(h => h.name === 'Subject')?.value || '(No subject)';
+                const from = headers.find(h => h.name === 'From')?.value || '';
+                const to = headers.find(h => h.name === 'To')?.value || '';
+                const date = headers.find(h => h.name === 'Date')?.value || '';
+                
+                // Extract body - handling different MIME types
+                let body = '';
+                if (details.data.payload.parts) {
+                    // Multipart message - find text part
+                    const textPart = details.data.payload.parts.find(
+                    part => part.mimeType === 'text/plain'
+                    );
+                    if (textPart && textPart.body.data) {
+                    body = Buffer.from(textPart.body.data, 'base64').toString();
+                    }
+                } else if (details.data.payload.body.data) {
+                    // Simple message
+                    body = Buffer.from(details.data.payload.body.data, 'base64').toString();
+                }
+                
+                return {
+                    subject,
+                    from,
+                    to,
+                    body,
+                    date,
+                    id: message.id
+                };
+                })
+            );
+            
+            return { success: true, emails };
+            
             } catch (error) {
             console.error('Error fetching email history:', error);
             return { success: false, emails: [] };

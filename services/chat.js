@@ -1,8 +1,8 @@
 // services/chat.js
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { research } = require('./research');
-const { scheduleEvent } = require('./calendar');
-const { sendEmail } = require('./email');
+const calendarService = require('./calendar');
+require('./email');
 const { 
   handleEmailIntent, 
   isInEmailFlow 
@@ -35,10 +35,10 @@ async function classifyIntent(text) {
     const response = result.response.text().trim();
     
     // Check if the response contains any of the intent types
-    if (response.includes('research_intent')) return 'research_intent';
-    if (response.includes('calendar_intent')) return 'calendar_intent';
-    if (response.includes('email_intent')) return 'email_intent';
-    if (response.includes('exit_intent')) return 'exit_intent';
+    if (response.toLowerCase().includes('research_intent')) return 'research_intent';
+    if (response.toLowerCase().includes('calendar_intent')) return 'calendar_intent';
+    if (response.toLowerCase().includes('email_intent')) return 'email_intent';
+    if (response.toLowerCase().includes('exit_intent')) return 'exit_intent';
     
     // Fallback to keyword matching if the model's response doesn't match expected format
     const intentMap = {
@@ -81,6 +81,9 @@ async function extractEntities(text, intentType) {
         - eventName: The name of the event (default to "Meeting" if not found)
         - dateTime: The date and time of the event (use ISO format YYYY-MM-DDTHH:MM:SSZ)
         
+        If no specific event name is mentioned, use "Meeting" as the default name.
+        If only "tomorrow" is mentioned for time, use tomorrow at 10:00 AM.
+        
         Return as JSON like: {"eventName": "event name", "dateTime": "date time"}
       `;
       const result = await model.generateContent(prompt);
@@ -96,10 +99,19 @@ async function extractEntities(text, intentType) {
         console.error('JSON parsing error:', e);
       }
       
-      // Fallback to regex
+      // Improve the fallback
       const eventMatch = text.match(/called\s+["']?(.+?)["']?/i);
       const eventName = eventMatch ? eventMatch[1] : 'Meeting';
-      const dateTime = text.includes('tomorrow') ? '2025-03-30T14:00:00Z' : '2025-03-29T11:00:00Z';
+      
+      // Calculate tomorrow's date properly
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setHours(10, 0, 0, 0);
+      
+      const dateTime = text.includes('tomorrow') ? 
+        tomorrow.toISOString() : 
+        new Date().toISOString();
+      
       return { eventName, dateTime };
       
     } else if (intentType === 'email_intent') {
@@ -191,11 +203,81 @@ async function analyzeSentiment(text) {
   }
 }
 
+// Add this function to handle calendar confirmations
+async function checkForPendingCalendarEvents(userInput) {
+    // Look for pending calendar events in conversation history
+    const pendingEvents = conversationHistory.filter(
+        msg => msg.role === 'system' && msg.content.includes('pendingCalendarEvent')
+    );
+    
+    if (pendingEvents.length > 0) {
+        try {
+            // Get the most recent pending event
+            const pendingData = JSON.parse(pendingEvents[pendingEvents.length - 1].content);
+            const pendingId = pendingData.pendingCalendarEvent;
+            
+            // Check if user confirmed
+            const confirmed = userInput.toLowerCase().match(/yes|confirm|ok|sure|schedule it/);
+            if (confirmed) {
+                // Remove the pending event marker
+                conversationHistory = conversationHistory.filter(
+                    msg => !(msg.role === 'system' && msg.content.includes(pendingId))
+                );
+                
+                return await calendarService.confirmCalendarEvent(pendingId, true);
+            } else if (userInput.toLowerCase().match(/no|cancel|don't|dont|nope/)) {
+                // Remove the pending event marker
+                conversationHistory = conversationHistory.filter(
+                    msg => !(msg.role === 'system' && msg.content.includes(pendingId))
+                );
+                
+                return await calendarService.confirmCalendarEvent(pendingId, false);
+            }
+        } catch (e) {
+            console.error('Error processing calendar confirmation:', e);
+        }
+    }
+    
+    return null;
+}
+
 // Process conversation with Gemini
 async function processInput(userInput) {
     // Add input to conversation history
     conversationHistory.push({ role: 'user', content: userInput });
     if (conversationHistory.length > 10) conversationHistory.shift(); // Keep last 10 messages
+    
+    // Check for pending calendar events first
+    const calendarResponse = await checkForPendingCalendarEvents(userInput);
+    if (calendarResponse) {
+        conversationHistory.push({ role: 'assistant', content: calendarResponse });
+        return calendarResponse;
+    }
+    
+    // Check for calendar suggestion responses
+    const pendingSuggestions = conversationHistory.filter(
+        msg => msg.role === 'system' && msg.content.includes('calendarSuggestions')
+    );
+    
+    if (pendingSuggestions.length > 0) {
+        try {
+            // Get the most recent suggestion context
+            const suggestionData = JSON.parse(pendingSuggestions[pendingSuggestions.length - 1].content);
+            
+            // Handle time selection
+            const response = await calendarService.handleTimeSelection(userInput, suggestionData.context);
+            
+            // Remove the suggestion context from history
+            conversationHistory = conversationHistory.filter(
+                msg => !(msg.role === 'system' && msg.content.includes('calendarSuggestions'))
+            );
+            
+            conversationHistory.push({ role: 'assistant', content: response });
+            return response;
+        } catch (e) {
+            console.error('Error handling calendar suggestion selection:', e);
+        }
+    }
     
     // If we're in the middle of an email flow, continue that
     if (isInEmailFlow()) {
@@ -215,7 +297,51 @@ async function processInput(userInput) {
             response = await research(entities.topic);
             break;
         case 'calendar_intent':
-            response = await scheduleEvent(entities.eventName, entities.dateTime);
+            console.log('Calendar intent detected:', {
+                eventName: entities.eventName,
+                userInput
+            });
+            
+            // Use the enhanced schedule handler
+            const scheduleResponse = await calendarService.handleScheduleIntent(userInput);
+            
+            // Check if the response is an object with suggestions that require a choice
+            if (typeof scheduleResponse === 'object' && scheduleResponse.requiresChoice) {
+                // Store the context for later use
+                conversationHistory.push({ 
+                    role: 'system', 
+                    content: JSON.stringify({
+                        calendarSuggestions: true,
+                        context: {
+                            suggestions: scheduleResponse.suggestions,
+                            parsedInput: scheduleResponse.parsedInput
+                        }
+                    })
+                });
+                
+                // Return the message to display
+                response = scheduleResponse.message;
+            } 
+            // Handle other object response types
+            else if (typeof scheduleResponse === 'object') {
+                if (scheduleResponse.requiresConfirmation && scheduleResponse.pendingId) {
+                    // Add pendingId to conversation history as a special marker
+                    conversationHistory.push({ 
+                        role: 'system', 
+                        content: JSON.stringify({
+                            pendingCalendarEvent: scheduleResponse.pendingId,
+                            eventName: scheduleResponse.eventName
+                        })
+                    });
+                }
+                
+                // Use the message field as the response
+                response = scheduleResponse.message || JSON.stringify(scheduleResponse);
+            } 
+            // Simple string response
+            else {
+                response = scheduleResponse;
+            }
             break;
         case 'email_intent':
             response = await handleEmailIntent(userInput, entities);

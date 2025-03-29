@@ -8,11 +8,21 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [newChat, setNewChat] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [sessionId, setSessionId] = useState("");
   const messagesEndRef = useRef(null);
   const dropdownRef = useRef(null);
 
   useEffect(() => {
-    fetchChats();
+    // Initialize or retrieve sessionId
+    const storedSessionId = localStorage.getItem("twinAI_sessionId");
+    if (storedSessionId) {
+      setSessionId(storedSessionId);
+    } else {
+      const newSessionId = "session_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9);
+      localStorage.setItem("twinAI_sessionId", newSessionId);
+      setSessionId(newSessionId);
+    }
+    
     // Close dropdown when clicking outside
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -24,6 +34,13 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    // Load conversation history when sessionId is available
+    if (sessionId) {
+      fetchConversationHistory();
+    }
+  }, [sessionId]);
+
+  useEffect(() => {
     scrollToBottom();
   }, [chats]);
 
@@ -31,16 +48,59 @@ export default function App() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  const fetchChats = async () => {
+  const fetchConversationHistory = async () => {
+    if (!sessionId) return;
+    
     try {
-      const res = await axios.get("http://localhost:5000/chats");
-      setChats(res.data);
+      setLoading(true);
+      const response = await axios.get(`http://localhost:3000/history/${sessionId}?limit=50`);
+      
+      if (response.data.history && response.data.history.length > 0) {
+        // Convert MongoDB message format to the app's chat format
+        const formattedChats = [];
+        
+        // Group messages into user-assistant pairs
+        let currentUserMessage = null;
+        
+        // Process messages in reverse to get chronological order (oldest first)
+        const sortedMessages = [...response.data.history].sort((a, b) => 
+          new Date(a.timestamp) - new Date(b.timestamp)
+        );
+        
+        for (const message of sortedMessages) {
+          if (message.role === "user") {
+            currentUserMessage = message.content;
+          } else if (message.role === "assistant" && currentUserMessage) {
+            formattedChats.push({
+              userMessage: currentUserMessage,
+              llmResponse: message.content
+            });
+            currentUserMessage = null;
+          }
+        }
+        
+        // If there's a hanging user message without a response
+        if (currentUserMessage) {
+          formattedChats.push({
+            userMessage: currentUserMessage,
+            llmResponse: "..."
+          });
+        }
+        
+        setChats(formattedChats);
+      }
     } catch (error) {
-      console.error("Error fetching chats:", error);
+      console.error("Error fetching conversation history:", error);
+    } finally {
+      setLoading(false);
     }
   };
 
   const startNewChat = () => {
+    // Generate a new session ID for a new chat
+    const newSessionId = "session_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9);
+    localStorage.setItem("twinAI_sessionId", newSessionId);
+    setSessionId(newSessionId);
     setChats([]);
     setNewChat(true);
   };
@@ -49,11 +109,14 @@ export default function App() {
     if (!message.trim()) return;
     setLoading(true);
   
-    const newChat = { userMessage: message, llmResponse: "..." };
-    setChats((prevChats) => [...prevChats, newChat]);
+    const newUserMessage = { userMessage: message, llmResponse: "..." };
+    setChats((prevChats) => [...prevChats, newUserMessage]);
   
     try {
-      const res = await axios.post("http://localhost:5000/chat", { message });
+      const res = await axios.post("http://localhost:3000/chat", { 
+        message, 
+        sessionId 
+      });
   
       // Replace placeholder with actual response
       setChats((prevChats) =>
@@ -65,6 +128,14 @@ export default function App() {
       );
     } catch (error) {
       console.error("Error:", error);
+      // Update UI to show error
+      setChats((prevChats) =>
+        prevChats.map((chat, index) =>
+          index === prevChats.length - 1
+            ? { ...chat, llmResponse: "Sorry, there was an error processing your message." }
+            : chat
+        )
+      );
     } finally {
       setLoading(false);
       setMessage("");
@@ -75,6 +146,10 @@ export default function App() {
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
     // You could add a toast notification here
+  };
+
+  const clearConversation = () => {
+    startNewChat();
   };
   
   return (
@@ -93,9 +168,20 @@ export default function App() {
             <div className="absolute right-0 mt-2 w-48 bg-[#1a1a1a] border border-gray-800 rounded-lg shadow-lg py-1">
               <div className="px-4 py-3 border-b border-gray-800">
                 <p className="text-sm font-medium">User</p>
-                <p className="text-xs text-gray-400">user@example.com</p>
+                <p className="text-xs text-gray-400 truncate">{sessionId}</p>
               </div>
-              <a href="#" className="block px-4 py-2 text-sm text-gray-300 hover:bg-[#2a2a2a]">Settings</a>
+              <button 
+                onClick={startNewChat}
+                className="block w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-[#2a2a2a]"
+              >
+                New Chat
+              </button>
+              <button 
+                onClick={clearConversation}
+                className="block w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-[#2a2a2a]"
+              >
+                Clear Conversation
+              </button>
               <a href="#" className="block px-4 py-2 text-sm text-gray-300 hover:bg-[#2a2a2a]">Help</a>
               <a href="#" className="block px-4 py-2 text-sm text-gray-300 hover:bg-[#2a2a2a]">Sign out</a>
             </div>

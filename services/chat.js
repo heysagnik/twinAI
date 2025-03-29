@@ -8,6 +8,7 @@ const {
   isInEmailFlow 
 } = require('./emailService');
 require('dotenv').config();
+const Message = require('../models/Message');
 
 // Initialize Gemini API
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -241,9 +242,16 @@ async function checkForPendingCalendarEvents(userInput) {
     return null;
 }
 
-// Process conversation with Gemini
-async function processInput(userInput) {
-    // Add input to conversation history
+// Update the processInput function to accept sessionId and store messages
+async function processInput(userInput, sessionId = 'default') {
+    // Store user message in MongoDB
+    await Message.create({
+        sessionId,
+        role: 'user',
+        content: userInput
+    });
+    
+    // Add input to conversation history (in-memory)
     conversationHistory.push({ role: 'user', content: userInput });
     if (conversationHistory.length > 10) conversationHistory.shift(); // Keep last 10 messages
     
@@ -382,9 +390,25 @@ async function processInput(userInput) {
             }
     }
     
-    // Add response to history
+    // Add response to history and store in MongoDB
     conversationHistory.push({ role: 'assistant', content: response });
+    
+    // Store assistant response in MongoDB
+    await Message.create({
+        sessionId,
+        role: 'assistant',
+        content: response
+    });
+    
     return response;
 }
 
-module.exports = { processInput, analyzeSentiment };
+// Add a function to retrieve conversation history from MongoDB
+async function getConversationHistory(sessionId, limit = 10) {
+    return await Message.find({ sessionId })
+        .sort({ timestamp: -1 })
+        .limit(limit)
+        .exec();
+}
+
+module.exports = { processInput, analyzeSentiment, getConversationHistory };

@@ -33,4 +33,4 @@ class EmailController {
     }
 }
 
-export default EmailController;
+module.exports = EmailController;

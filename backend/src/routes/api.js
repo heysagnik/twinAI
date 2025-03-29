@@ -1,8 +1,8 @@
-import express from 'express';
-import emailRoutes from './emailRoutes.js';
-import meetingRoutes from './meetingRoutes.js';
-import todoRoutes from './todoRoutes.js';
-import twinRoutes from './twinRoutes.js';
+const express = require('express');
+const emailRoutes = require('./emailRoutes.js');
+const meetingRoutes = require('./meetingRoutes.js');
+const todoRoutes = require('./todoRoutes.js');
+const twinRoutes = require('./twinRoutes.js');
 
 const router = express.Router();
 
@@ -12,4 +12,4 @@ router.use('/meetings', meetingRoutes);
 router.use('/todos', todoRoutes);
 router.use('/twins', twinRoutes);
 
-export default router;
+module.exports = router;

@@ -72,7 +72,7 @@ const ChatInput = ({ value, onChange, onSubmit, typingPrompt }) => {
       >
         <textarea
           ref={textareaRef}
-          placeholder="Ask anything or type / for commands..."
+          placeholder="Ask anything ."
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={handleKeyDown}

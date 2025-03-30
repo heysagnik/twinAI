@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { Box, Image, Video, ChevronDown, Sparkles } from "lucide-react";
-import FeatureCard from "./components/FeatureCard";
+import { Box, Image, Video, ChevronDown, Sparkles, Mail, Calendar, Search } from "lucide-react";
 
 export default function App() {
   const [message, setMessage] = useState("");
@@ -8,27 +7,27 @@ export default function App() {
 
   const features = [
     {
-      title: "Help me to create 3D object",
-      icon: Box,
-      gradient: ["#6366f1", "#8b5cf6"],
-      mode: "3D Object"
+      title: "Help me to send an email",
+      icon: Mail,
+      gradient: ["#6366f1", "#8b5cf6", "#9333ea"], // Purple gradient
+      mode: "Mail"
     },
     {
-      title: "Help me to create comic",
-      icon: Image,
-      gradient: ["#3b82f6", "#06b6d4"],
-      mode: "Comic"
+      title: "Set up a meeting",
+      icon: Calendar,
+      gradient: ["#3b82f6", "#06b6d4", "#14b8a6"], // Blue-green gradient
+      mode: "Calendar"
     },
     {
-      title: "Help me to create video",
-      icon: Video,
-      gradient: ["#ec4899", "#f43f5e"],
-      mode: "Video"
+      title: "Help me research on a topic",
+      icon: Search,
+      gradient: ["#ec4899", "#f43f5e", "#ef4444"], // Pink-red gradient
+      mode: "Search"
     }
   ];
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-6">
+    <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-gray-900 text-white">
       {/* Logo Animation */}
       <div className="mb-6 animate-float">
         <div className="w-12 h-12 relative">
@@ -47,12 +46,20 @@ export default function App() {
 
       {/* Feature Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-4xl w-full mb-12">
-        {features.map((feature) => (
-          <FeatureCard
-            key={feature.mode}
-            {...feature}
-            onClick={() => setSelectedMode(feature.mode)}
-          />
+        {features.map(({ title, icon: Icon, gradient, mode }) => (
+          <div
+            key={mode}
+            className="p-6 rounded-2xl cursor-pointer transition-transform transform hover:scale-105 shadow-lg"
+            style={{
+              background: `linear-gradient(135deg, ${gradient.join(", ")})`
+            }}
+            onClick={() => setSelectedMode(mode)}
+          >
+            <div className="flex flex-col items-center justify-center space-y-4">
+              <Icon className="w-12 h-12 text-white" />
+              <h3 className="text-white text-lg font-semibold text-center">{title}</h3>
+            </div>
+          </div>
         ))}
       </div>
 

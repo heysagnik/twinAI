@@ -2,12 +2,16 @@ const { google } = require('googleapis');
 const fs = require('fs').promises;
 const path = require('path');
 const { authenticate } = require('@google-cloud/local-auth');
+const User = require('../../models/User');
+const crypto = require('crypto');
 
 const SCOPES = [
   'https://www.googleapis.com/auth/gmail.readonly',
   'https://www.googleapis.com/auth/gmail.send',
   'https://www.googleapis.com/auth/calendar',
-  'https://www.googleapis.com/auth/calendar.events'
+  'https://www.googleapis.com/auth/calendar.events',
+  'https://www.googleapis.com/auth/userinfo.email',
+  'https://www.googleapis.com/auth/userinfo.profile'
 ];
 
 // Use environment variable for token storage when available.  
@@ -20,6 +24,57 @@ let gmailClient = null;
 let calendarClient = null;
 let lastClientRefresh = 0;
 const CLIENT_REFRESH_INTERVAL = 30 * 60 * 1000; // 30 minutes
+
+// Encrypt tokens before storing in DB
+function encryptData(data, key = process.env.ENCRYPTION_KEY) {
+  if (!key) {
+    console.warn('No encryption key found. Using less secure storage.');
+    return JSON.stringify(data);
+  }
+  
+  try {
+    const iv = crypto.randomBytes(16);
+    const cipher = crypto.createCipheriv('aes-256-gcm', Buffer.from(key, 'hex'), iv);
+    let encrypted = cipher.update(JSON.stringify(data), 'utf8', 'hex');
+    encrypted += cipher.final('hex');
+    const authTag = cipher.getAuthTag();
+    
+    return JSON.stringify({
+      iv: iv.toString('hex'),
+      encryptedData: encrypted,
+      authTag: authTag.toString('hex')
+    });
+  } catch (error) {
+    console.error('Encryption error:', error);
+    return JSON.stringify(data);
+  }
+}
+
+// Decrypt tokens when retrieving from DB
+function decryptData(encryptedJson, key = process.env.ENCRYPTION_KEY) {
+  if (!key) {
+    console.warn('No encryption key found. Using less secure storage.');
+    return JSON.parse(encryptedJson);
+  }
+  
+  try {
+    const { iv, encryptedData, authTag } = JSON.parse(encryptedJson);
+    const decipher = crypto.createDecipheriv(
+      'aes-256-gcm', 
+      Buffer.from(key, 'hex'), 
+      Buffer.from(iv, 'hex')
+    );
+    decipher.setAuthTag(Buffer.from(authTag, 'hex'));
+    
+    let decrypted = decipher.update(encryptedData, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    
+    return JSON.parse(decrypted);
+  } catch (error) {
+    console.error('Decryption error:', error);
+    return JSON.parse(encryptedJson);
+  }
+}
 
 async function tokenExists() {
   try {
@@ -130,6 +185,28 @@ async function getCalendarClient(skipBrowserAuth = false) {
   return calendarClient;
 }
 
+async function getUserInfo(auth) {
+  const people = google.people({ version: 'v1', auth });
+  const { data } = await people.people.get({
+    resourceName: 'people/me',
+    personFields: 'names,emailAddresses,photos'
+  });
+  
+  const name = data.names && data.names.length > 0 ? data.names[0].displayName : '';
+  const firstName = data.names && data.names.length > 0 ? data.names[0].givenName : '';
+  const lastName = data.names && data.names.length > 0 ? data.names[0].familyName : '';
+  const email = data.emailAddresses && data.emailAddresses.length > 0 ? data.emailAddresses[0].value : '';
+  const photoUrl = data.photos && data.photos.length > 0 ? data.photos[0].url : '';
+  
+  return {
+    name,
+    firstName,
+    lastName,
+    email,
+    profilePhoto: photoUrl
+  };
+}
+
 async function exchangeCodeForTokens(code) {
   try {
     const content = await fs.readFile(CREDENTIALS_PATH);
@@ -145,6 +222,15 @@ async function exchangeCodeForTokens(code) {
     const { tokens } = await oAuth2Client.getToken(code);
     oAuth2Client.setCredentials(tokens);
     
+    // Get user info
+    const userInfo = await getUserInfo(oAuth2Client);
+    
+    // Add Google ID to userInfo
+    const oauth2 = google.oauth2({ version: 'v2', auth: oAuth2Client });
+    const { data } = await oauth2.userinfo.get();
+    userInfo.googleId = data.id;
+    
+    // Save token to file
     const payload = JSON.stringify({
       type: 'authorized_user',
       client_id: key.client_id,
@@ -157,14 +243,61 @@ async function exchangeCodeForTokens(code) {
     await fs.writeFile(TOKEN_PATH, payload);
     console.log('Token saved to', TOKEN_PATH);
     
+    // Save user data to MongoDB
+    await saveUserData(userInfo, tokens);
+    
     authClient = oAuth2Client;
     gmailClient = null;
     calendarClient = null;
     lastClientRefresh = Date.now();
     
-    return oAuth2Client;
+    return {
+      oAuth2Client,
+      userInfo
+    };
   } catch (error) {
     console.error('Error exchanging code for tokens:', error);
+    throw error;
+  }
+}
+
+async function saveUserData(userInfo, tokens) {
+  try {
+    // Encrypt sensitive token data
+    const encryptedTokens = encryptData(tokens);
+    
+    // Find or create user
+    await User.findOneAndUpdate(
+      { googleId: userInfo.googleId },
+      { 
+        ...userInfo,
+        tokenData: encryptedTokens,
+        lastLogin: new Date()
+      },
+      { 
+        upsert: true, 
+        new: true,
+        setDefaultsOnInsert: true
+      }
+    );
+    
+    console.log(`User data saved/updated for: ${userInfo.email}`);
+  } catch (error) {
+    console.error('Error saving user data:', error);
+    throw error;
+  }
+}
+
+async function getUserFromToken(tokenData) {
+  try {
+    // Find user by token
+    const user = await User.findOne({ 'tokenData.access_token': tokenData.access_token });
+    if (!user) {
+      throw new Error('User not found for this token');
+    }
+    return user;
+  } catch (error) {
+    console.error('Error getting user from token:', error);
     throw error;
   }
 }
@@ -175,5 +308,7 @@ module.exports = {
   getCalendarClient,
   getAuthUrl,
   tokenExists,
-  exchangeCodeForTokens
+  exchangeCodeForTokens,
+  getUserInfo,
+  getUserFromToken
 };

@@ -1,10 +1,9 @@
 const mongoose = require('mongoose');
 
-const messageSchema = new mongoose.Schema({
+const MessageSchema = new mongoose.Schema({
   sessionId: {
     type: String,
-    required: true,
-    index: true
+    required: true
   },
   role: {
     type: String,
@@ -19,8 +18,12 @@ const messageSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   }
+}, {
+  timestamps: true
 });
 
-const Message = mongoose.model('Message', messageSchema);
+// Create index for faster querying
+MessageSchema.index({ sessionId: 1, timestamp: -1 });
 
-module.exports = Message;
+// Fixed model registration syntax
+module.exports = mongoose.models.Message || mongoose.model('Message', MessageSchema);

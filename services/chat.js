@@ -9,6 +9,8 @@ const {
 } = require('./emailService');
 require('dotenv').config();
 const Message = require('../models/Message');
+const Chat = require('../models/Chat');
+const User = require('../models/User');
 
 // Initialize Gemini API
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -242,8 +244,9 @@ async function checkForPendingCalendarEvents(userInput) {
     return null;
 }
 
-// Update the processInput function to accept sessionId and store messages
-async function processInput(userInput, sessionId = 'default') {
+// Process the user input and generate a response
+async function processInput(userInput, sessionId, userId = null) {
+  try {
     // Store user message in MongoDB
     await Message.create({
         sessionId,
@@ -400,15 +403,96 @@ async function processInput(userInput, sessionId = 'default') {
         content: response
     });
     
+    // Save the conversation to MongoDB if userId is provided
+    if (userId) {
+      await saveConversation(sessionId, userId, userInput, response);
+    }
+    
     return response;
+  } catch (error) {
+    console.error('Error processing chat input:', error);
+    throw error;
+  }
 }
 
-// Add a function to retrieve conversation history from MongoDB
-async function getConversationHistory(sessionId, limit = 10) {
-    return await Message.find({ sessionId })
-        .sort({ timestamp: -1 })
-        .limit(limit)
-        .exec();
+async function saveConversation(sessionId, userId, userInput, aiResponse) {
+  try {
+    // Find or create the chat session
+    let chat = await Chat.findOne({ sessionId, userId });
+    
+    if (!chat) {
+      chat = new Chat({
+        sessionId,
+        userId,
+        title: userInput.substring(0, 30) + (userInput.length > 30 ? '...' : ''),
+        messages: []
+      });
+    }
+    
+    // Add the new messages
+    chat.messages.push(
+      { role: 'user', content: userInput },
+      { role: 'assistant', content: aiResponse }
+    );
+    
+    // Update the timestamp
+    chat.updatedAt = new Date();
+    
+    // Auto-generate a title from the first user message if not set yet
+    if (chat.title === 'New Chat' && chat.messages.length <= 2) {
+      chat.title = userInput.substring(0, 30) + (userInput.length > 30 ? '...' : '');
+    }
+    
+    await chat.save();
+    return chat;
+  } catch (error) {
+    console.error('Error saving conversation:', error);
+    throw error;
+  }
 }
 
-module.exports = { processInput, analyzeSentiment, getConversationHistory };
+async function getConversationHistory(sessionId, limit = 10, userId = null) {
+  try {
+    const query = { sessionId };
+    if (userId) {
+      query.userId = userId;
+    }
+    
+    const chat = await Chat.findOne(query)
+      .sort({ updatedAt: -1 })
+      .limit(1);
+      
+    if (!chat) {
+      return [];
+    }
+    
+    // Return the latest messages up to the limit
+    return chat.messages.slice(-limit);
+  } catch (error) {
+    console.error('Error retrieving conversation history:', error);
+    throw error;
+  }
+}
+
+async function getUserChats(userId, limit = 10, skip = 0) {
+  try {
+    const chats = await Chat.find({ userId })
+      .sort({ updatedAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .select('title updatedAt sessionId');
+      
+    return chats;
+  } catch (error) {
+    console.error('Error retrieving user chats:', error);
+    throw error;
+  }
+}
+
+module.exports = {
+  processInput,
+  analyzeSentiment,
+  getConversationHistory,
+  getUserChats,
+  saveConversation
+};

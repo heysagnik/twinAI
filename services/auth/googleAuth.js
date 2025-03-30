@@ -33,8 +33,13 @@ function encryptData(data, key = process.env.ENCRYPTION_KEY) {
   }
   
   try {
+    // Fix: Create a proper 32-byte key by hashing the provided key
+    const hash = crypto.createHash('sha256');
+    hash.update(key);
+    const keyBuffer = hash.digest();
+    
     const iv = crypto.randomBytes(16);
-    const cipher = crypto.createCipheriv('aes-256-gcm', Buffer.from(key, 'hex'), iv);
+    const cipher = crypto.createCipheriv('aes-256-gcm', keyBuffer, iv);
     let encrypted = cipher.update(JSON.stringify(data), 'utf8', 'hex');
     encrypted += cipher.final('hex');
     const authTag = cipher.getAuthTag();
@@ -58,10 +63,15 @@ function decryptData(encryptedJson, key = process.env.ENCRYPTION_KEY) {
   }
   
   try {
+    // Fix: Create a proper 32-byte key by hashing the provided key (same as in encryptData)
+    const hash = crypto.createHash('sha256');
+    hash.update(key);
+    const keyBuffer = hash.digest();
+    
     const { iv, encryptedData, authTag } = JSON.parse(encryptedJson);
     const decipher = crypto.createDecipheriv(
       'aes-256-gcm', 
-      Buffer.from(key, 'hex'), 
+      keyBuffer, 
       Buffer.from(iv, 'hex')
     );
     decipher.setAuthTag(Buffer.from(authTag, 'hex'));

@@ -4,48 +4,85 @@ import { Mail, FileText, Calendar, BookOpen, Download } from 'lucide-react';
 
 const ChatMessage = ({ message, isUser }) => {
   const [messageType, setMessageType] = useState('text');
-  const [parsedContent, setParsedContent] = useState(message);
+  const [parsedContent, setParsedContent] = useState('');
 
-  // Detect message type and parse its content
+  // Process the message when it arrives
   useEffect(() => {
-    if (!isUser && typeof message === 'string') {
-      // Detect research content
-      if (
-        (message.includes('Source') || message.includes('Reference')) &&
-        (message.includes('Wikipedia') || message.includes('arXiv'))
-      ) {
-        setMessageType('research');
+    if (isUser) {
+      // User messages are always text
+      setMessageType('text');
+      setParsedContent(message);
+      return;
+    }
+
+    // Check if message is an object with type field
+    if (typeof message === 'object' && message.type && message.content) {
+      setMessageType(message.type);
+      
+      if (message.type === 'email') {
+        // Parse email content if needed
+        try {
+          if (typeof message.content === 'string') {
+            const emailParts = {};
+            const toMatch = message.content.match(/To:\s*([^\n]+)/);
+            const subjectMatch = message.content.match(/Subject:\s*([^\n]+)/);
+            const bodyMatch = message.content.match(/(?:Body:|Message:)([\s\S]+?)(?:Regards|Sincerely|Best|$)/i);
+            
+            if (toMatch) emailParts.to = toMatch[1].trim();
+            if (subjectMatch) emailParts.subject = subjectMatch[1].trim();
+            if (bodyMatch) emailParts.body = bodyMatch[1].trim();
+            
+            setParsedContent(emailParts);
+          } else {
+            setParsedContent(message.content);
+          }
+        } catch (error) {
+          console.error('Failed to parse email content:', error);
+          setParsedContent(message.content);
+        }
+      } else {
+        // For other message types, just use the content directly
+        setParsedContent(message.content);
       }
-      // Detect email draft
-      else if (
-        message.includes('Subject:') && 
-        (message.includes('To:') || message.includes('From:'))
-      ) {
+      return;
+    }
+    
+    // If the message is a string or unknown format, try to detect type
+    const content = typeof message === 'string' ? message : 
+                   (message.content ? message.content : JSON.stringify(message));
+    
+    // Fallback detection logic
+    if (typeof content === 'string') {
+      if ((content.includes('Source') || content.includes('Reference')) &&
+          (content.includes('Wikipedia') || content.includes('arXiv'))) {
+        setMessageType('research');
+      } else if (content.includes('Subject:') && 
+                (content.includes('To:') || content.includes('From:'))) {
         setMessageType('email');
         
         // Parse email parts
         const emailParts = {};
-        
-        const toMatch = message.match(/To:\s*([^\n]+)/);
-        const subjectMatch = message.match(/Subject:\s*([^\n]+)/);
-        const bodyMatch = message.match(/(?:Body:|Message:)([\s\S]+?)(?:Regards|Sincerely|Best|$)/i);
+        const toMatch = content.match(/To:\s*([^\n]+)/);
+        const subjectMatch = content.match(/Subject:\s*([^\n]+)/);
+        const bodyMatch = content.match(/(?:Body:|Message:)([\s\S]+?)(?:Regards|Sincerely|Best|$)/i);
         
         if (toMatch) emailParts.to = toMatch[1].trim();
         if (subjectMatch) emailParts.subject = subjectMatch[1].trim();
         if (bodyMatch) emailParts.body = bodyMatch[1].trim();
         
         setParsedContent(emailParts);
-      }
-      // Detect calendar event
-      else if (
-        message.includes('scheduled') && 
-        (message.includes('calendar') || message.includes('event'))
-      ) {
+        return;
+      } else if (content.includes('scheduled') && 
+                (content.includes('calendar') || content.includes('event'))) {
         setMessageType('calendar');
-      }
-      else {
+      } else {
         setMessageType('text');
       }
+      
+      setParsedContent(content);
+    } else {
+      setMessageType('text');
+      setParsedContent(JSON.stringify(content));
     }
   }, [message, isUser]);
 
@@ -58,7 +95,7 @@ const ChatMessage = ({ message, isUser }) => {
       </div>
       <div className="p-4">
         <div className="prose prose-gray prose-headings:text-gray-800 prose-a:text-orange-600 max-w-none">
-          <ReactMarkdown>{message}</ReactMarkdown>
+          <ReactMarkdown>{typeof parsedContent === 'string' ? parsedContent : JSON.stringify(parsedContent)}</ReactMarkdown>
         </div>
         <div className="mt-4 pt-3 border-t border-gray-100 flex justify-end">
           <button className="flex items-center text-xs text-gray-500 hover:text-orange-600 transition-colors">
@@ -118,7 +155,7 @@ const ChatMessage = ({ message, isUser }) => {
       </div>
       <div className="p-4">
         <div className="prose prose-gray max-w-none">
-          <ReactMarkdown>{message}</ReactMarkdown>
+          <ReactMarkdown>{typeof parsedContent === 'string' ? parsedContent : JSON.stringify(parsedContent)}</ReactMarkdown>
         </div>
         <div className="mt-4 pt-3 border-t border-gray-100 flex justify-end space-x-2">
           <button className="px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition-colors">
@@ -132,7 +169,7 @@ const ChatMessage = ({ message, isUser }) => {
   // Regular text content
   const TextContent = () => (
     <div className="prose prose-gray prose-p:text-gray-700 prose-headings:text-gray-800 prose-a:text-orange-600 max-w-none">
-      <ReactMarkdown>{message}</ReactMarkdown>
+      <ReactMarkdown>{typeof parsedContent === 'string' ? parsedContent : JSON.stringify(parsedContent)}</ReactMarkdown>
     </div>
   );
 
@@ -153,7 +190,7 @@ const ChatMessage = ({ message, isUser }) => {
           <div className="flex-1">
             {isUser ? (
               <div className="prose prose-gray max-w-none">
-                {message}
+                {typeof parsedContent === 'string' ? parsedContent : JSON.stringify(parsedContent)}
               </div>
             ) : (
               <>

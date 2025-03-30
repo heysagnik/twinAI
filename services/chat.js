@@ -10,7 +10,6 @@ const {
 require('dotenv').config();
 const Message = require('../models/Message');
 const Chat = require('../models/Chat');
-const User = require('../models/User');
 
 // Initialize Gemini API
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -19,16 +18,39 @@ const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 // Add conversation context
 let conversationHistory = [];
 
-// Intent classification function using Gemini
+// Updated intent classification function with better research intent detection
 async function classifyIntent(text) {
   try {
+    // First check for explicit deep research requests
+    const deepResearchPatterns = [
+      /deep research/i,
+      /comprehensive research/i,
+      /thorough analysis/i,
+      /detailed study/i,
+      /in-depth report/i,
+      /academic paper/i,
+      /scholarly (article|research)/i,
+      /literature review/i
+    ];
+    
+    // Check if any deep research patterns match
+    const isDeepResearch = deepResearchPatterns.some(pattern => pattern.test(text));
+    
+    // If it's a deep research request, immediately return research intent
+    if (isDeepResearch) {
+      return 'research_intent';
+    }
+    
+    // Otherwise, proceed with normal intent classification
     const prompt = `
       Classify the intent of the following text into one of these categories:
-      - research_intent: For requests about researching a topic
       - calendar_intent: For scheduling events or meetings
       - email_intent: For sending emails
       - exit_intent: For exiting or ending the conversation
-      - chat_intent: For general conversation
+      - chat_intent: For general conversation or basic questions
+      
+      Note: Only classify as research_intent if the user specifically requests detailed research, 
+      otherwise classify as chat_intent for simple questions.
       
       Text: "${text}"
       
@@ -38,17 +60,20 @@ async function classifyIntent(text) {
     const response = result.response.text().trim();
     
     // Check if the response contains any of the intent types
-    if (response.toLowerCase().includes('research_intent')) return 'research_intent';
     if (response.toLowerCase().includes('calendar_intent')) return 'calendar_intent';
     if (response.toLowerCase().includes('email_intent')) return 'email_intent';
     if (response.toLowerCase().includes('exit_intent')) return 'exit_intent';
     
-    // Fallback to keyword matching if the model's response doesn't match expected format
+    // Fallback to keyword matching for non-research intents
     const intentMap = {
-      'research': 'research_intent',
       'schedule': 'calendar_intent', 
+      'meeting': 'calendar_intent',
+      'appointment': 'calendar_intent',
       'email': 'email_intent',
-      'quit': 'exit_intent'
+      'send': 'email_intent',
+      'quit': 'exit_intent',
+      'bye': 'exit_intent',
+      'goodbye': 'exit_intent'
     };
     
     for (const [keyword, intent] of Object.entries(intentMap)) {
@@ -57,7 +82,8 @@ async function classifyIntent(text) {
       }
     }
     
-    return 'chat_intent'; // Default fallback
+    // Return chat_intent as default for all questions not explicitly requesting research
+    return 'chat_intent';
   } catch (error) {
     console.error('Intent classification error:', error);
     return 'chat_intent'; // Default on error
@@ -71,8 +97,13 @@ async function extractEntities(text, intentType) {
     
     if (intentType === 'research_intent') {
       prompt = `
-        Extract the research topic from this text: "${text}"
-        Output just the topic with no additional text.
+        Extract the precise research topic from this text: "${text}"
+        The user is requesting deep research on a topic.
+        Remove phrases like "I want research on" or "Please do deep research about".
+        Only output the core topic that needs to be researched, with no additional text.
+        For example:
+        - From "I need deep research on quantum computing" → "quantum computing"
+        - From "Do comprehensive research about climate change impacts" → "climate change impacts"
       `;
       const result = await model.generateContent(prompt);
       const topic = result.response.text().trim();
@@ -244,6 +275,14 @@ async function checkForPendingCalendarEvents(userInput) {
     return null;
 }
 
+// Helper function to format the response with type metadata
+function formatResponse(content, type) {
+  return {
+    content,
+    type
+  };
+}
+
 // Process the user input and generate a response
 async function processInput(userInput, sessionId, userId = null) {
   try {
@@ -261,8 +300,13 @@ async function processInput(userInput, sessionId, userId = null) {
     // Check for pending calendar events first
     const calendarResponse = await checkForPendingCalendarEvents(userInput);
     if (calendarResponse) {
-        conversationHistory.push({ role: 'assistant', content: calendarResponse });
-        return calendarResponse;
+        const formattedResponse = formatResponse(calendarResponse, 'calendar');
+        conversationHistory.push({ 
+          role: 'assistant', 
+          content: formattedResponse.content,
+          type: formattedResponse.type
+        });
+        return formattedResponse;
     }
     
     // Check for calendar suggestion responses
@@ -283,8 +327,13 @@ async function processInput(userInput, sessionId, userId = null) {
                 msg => !(msg.role === 'system' && msg.content.includes('calendarSuggestions'))
             );
             
-            conversationHistory.push({ role: 'assistant', content: response });
-            return response;
+            const formattedResponse = formatResponse(response, 'calendar');
+            conversationHistory.push({ 
+              role: 'assistant', 
+              content: formattedResponse.content,
+              type: formattedResponse.type
+            });
+            return formattedResponse;
         } catch (e) {
             console.error('Error handling calendar suggestion selection:', e);
         }
@@ -293,8 +342,13 @@ async function processInput(userInput, sessionId, userId = null) {
     // If we're in the middle of an email flow, continue that
     if (isInEmailFlow()) {
         const response = await handleEmailIntent(userInput, {});
-        conversationHistory.push({ role: 'assistant', content: response });
-        return response;
+        const formattedResponse = formatResponse(response, 'email');
+        conversationHistory.push({ 
+          role: 'assistant', 
+          content: formattedResponse.content,
+          type: formattedResponse.type
+        });
+        return formattedResponse;
     }
     
     // Otherwise, process normally
@@ -302,10 +356,13 @@ async function processInput(userInput, sessionId, userId = null) {
     const entities = await extractEntities(userInput, intent);
     
     let response;
+    let responseType = 'text';
     
     switch(intent) {
         case 'research_intent':
+            console.log(`Deep research requested on topic: ${entities.topic}`);
             response = await research(entities.topic);
+            responseType = 'research';
             break;
         case 'calendar_intent':
             console.log('Calendar intent detected:', {
@@ -315,6 +372,7 @@ async function processInput(userInput, sessionId, userId = null) {
             
             // Use the enhanced schedule handler
             const scheduleResponse = await calendarService.handleScheduleIntent(userInput);
+            responseType = 'calendar';
             
             // Check if the response is an object with suggestions that require a choice
             if (typeof scheduleResponse === 'object' && scheduleResponse.requiresChoice) {
@@ -356,16 +414,51 @@ async function processInput(userInput, sessionId, userId = null) {
             break;
         case 'email_intent':
             response = await handleEmailIntent(userInput, entities);
+            responseType = 'email';
             break;
         case 'exit_intent':
             response = 'Peace out!';
+            responseType = 'text';
             break;
         default:
+            // For chat_intent and any other fallbacks
             try {
-                // Create a chat history for Gemini
+                // Check if it's a simple question that doesn't need deep research
+                const isSimpleQuestion = userInput.match(/what|who|when|where|why|how/i) && 
+                                        !userInput.match(/research|detail|comprehensive|thorough/i);
+                
+                // For simple questions about factual topics, use a direct approach
+                if (isSimpleQuestion) {
+                    const prompt = `
+                        Answer this question in a conversational, helpful way: "${userInput}"
+                        Keep your answer concise but informative. Don't use academic paper formatting.
+                        Use a friendly tone as if you're chatting with a friend.
+                    `;
+                    
+                    const result = await model.generateContent({
+                        contents: [{ role: "user", parts: [{ text: prompt }] }],
+                        generationConfig: {
+                            temperature: 0.7,
+                            maxOutputTokens: 500,
+                        },
+                    });
+                    
+                    const assistantReply = result.response.text();
+                    
+                    // Add response to history
+                    const formattedResponse = formatResponse(assistantReply, 'text');
+                    conversationHistory.push({ 
+                      role: 'assistant', 
+                      content: formattedResponse.content,
+                      type: formattedResponse.type
+                    });
+                    return formattedResponse;
+                }
+                
+                // Otherwise use chat history for context
                 const chatHistory = conversationHistory.map(msg => ({
                     role: msg.role === 'user' ? 'user' : 'model',
-                    parts: [{ text: msg.content }]
+                    parts: [{ text: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content) }]
                 }));
                 
                 // Remove the last user message since we'll send it separately
@@ -376,7 +469,7 @@ async function processInput(userInput, sessionId, userId = null) {
                     history: chatHistory.length > 0 ? chatHistory : [],
                     generationConfig: {
                         temperature: 0.7,
-                        maxOutputTokens: 150,
+                        maxOutputTokens: 350,
                     }
                 });
                 
@@ -385,30 +478,44 @@ async function processInput(userInput, sessionId, userId = null) {
                 const assistantReply = result.response.text();
                 
                 // Add response to history
-                conversationHistory.push({ role: 'assistant', content: assistantReply });
-                return assistantReply;
+                const formattedResponse = formatResponse(assistantReply, 'text');
+                conversationHistory.push({ 
+                  role: 'assistant', 
+                  content: formattedResponse.content,
+                  type: formattedResponse.type
+                });
+                return formattedResponse;
             } catch (error) {
                 console.error('Chat generation error:', error);
-                response = `AI: Couldn't process that: ${error.message}`;
+                response = `I'm having trouble processing that request. Could you try rephrasing it?`;
+                responseType = 'text';
             }
     }
     
+    // Format the response with type metadata
+    const formattedResponse = formatResponse(response, responseType);
+    
     // Add response to history and store in MongoDB
-    conversationHistory.push({ role: 'assistant', content: response });
+    conversationHistory.push({ 
+      role: 'assistant', 
+      content: formattedResponse.content,
+      type: formattedResponse.type
+    });
     
     // Store assistant response in MongoDB
     await Message.create({
         sessionId,
         role: 'assistant',
-        content: response
+        content: response,
+        metadata: { type: responseType }
     });
     
     // Save the conversation to MongoDB if userId is provided
     if (userId) {
-      await saveConversation(sessionId, userId, userInput, response);
+      await saveConversation(sessionId, userId, userInput, formattedResponse);
     }
     
-    return response;
+    return formattedResponse;
   } catch (error) {
     console.error('Error processing chat input:', error);
     throw error;
@@ -432,7 +539,13 @@ async function saveConversation(sessionId, userId, userInput, aiResponse) {
     // Add the new messages
     chat.messages.push(
       { role: 'user', content: userInput },
-      { role: 'assistant', content: aiResponse }
+      { 
+        role: 'assistant', 
+        content: typeof aiResponse === 'object' ? aiResponse.content : aiResponse,
+        metadata: { 
+          type: typeof aiResponse === 'object' ? aiResponse.type : 'text' 
+        }
+      }
     );
     
     // Update the timestamp

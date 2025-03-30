@@ -10,6 +10,7 @@ export default function App() {
   const [message, setMessage] = useState("");
   const [chatHistory, setChatHistory] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [typingPrompt, setTypingPrompt] = useState("");
 
   // Mock data
   const agencies = [
@@ -38,6 +39,11 @@ export default function App() {
       { id: 4, title: "FAANG design practices" },
       { id: 5, title: "Quantitative Research Types" }
     ]
+  };
+
+  // Handle feature card selection from BlankPage
+  const handleSelectPrompt = (prompt) => {
+    setTypingPrompt(prompt);
   };
 
   const handleSubmit = async () => {
@@ -78,7 +84,7 @@ export default function App() {
       {/* Sidebar */}
       <Sidebar
         currentUser={{
-          username: "ryanmitchell",
+          username: "raghav",
           avatar: null
         }}
         chats={mockChats}
@@ -98,7 +104,7 @@ export default function App() {
             <div className="h-full flex flex-col">
               <div className="flex-1 flex items-center justify-center">
                 <div className="max-w-3xl w-full px-4">
-                  <BlankPage/>
+                  <BlankPage onSelectPrompt={handleSelectPrompt} />
                 </div>
               </div>
             </div>
@@ -133,7 +139,7 @@ export default function App() {
             value={message}
             onChange={setMessage}
             onSubmit={handleSubmit}
-            promptsLeft={3}
+            typingPrompt={typingPrompt}
           />
         </div>
       </div>

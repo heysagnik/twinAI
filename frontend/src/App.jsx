@@ -13,6 +13,7 @@ export default function App() {
   const [typingPrompt, setTypingPrompt] = useState("");
   const [showAuthPage, setShowAuthPage] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   useEffect(() => {
     // Check if user is authenticated initially
@@ -106,35 +107,56 @@ export default function App() {
     setShowAuthPage(false);
   };
 
+  const toggleMobileSidebar = () => {
+    setMobileSidebarOpen(!mobileSidebarOpen);
+  };
+
   if (showAuthPage) {
     return <AuthPage onAuthComplete={handleAuthComplete} />;
   }
 
   return (
-    <div className="flex h-screen bg-white">
-      {/* Sidebar */}
-      <Sidebar
-        currentUser={{
-          username: "raghav",
-          avatar: null
-        }}
-        chats={mockChats}
-        onNewChat={() => setChatHistory([])}
-        onConnectGoogle={() => setShowAuthPage(true)}
-        isAuthenticated={isAuthenticated}
-      />
+    <div className="flex h-screen bg-white overflow-hidden">
+      {/* Mobile sidebar backdrop */}
+      {mobileSidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black/30 z-20 md:hidden" 
+          onClick={() => setMobileSidebarOpen(false)}
+        ></div>
+      )}
+      
+      {/* Sidebar - responsive */}
+      <div className={`${
+        mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+      } fixed md:relative md:translate-x-0 z-30 h-full transition-transform duration-300 ease-in-out w-[260px]`}>
+        <Sidebar
+          currentUser={{
+            username: "raghav",
+            avatar: null
+          }}
+          chats={mockChats}
+          onNewChat={() => setChatHistory([])}
+          onConnectGoogle={() => setShowAuthPage(true)}
+          isAuthenticated={isAuthenticated}
+        />
+      </div>
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col h-screen overflow-hidden">
+      {/* Main Content - flexible width */}
+      <div className="flex-1 flex flex-col h-screen md:ml-0 ml-0 relative">
+        {/* Header with mobile menu toggle */}
         <Header 
           model="Open AI GPT-4.0"
           onShare={() => {}}
           onReport={() => {}}
           isAuthenticated={isAuthenticated}
           onConnectGoogle={() => setShowAuthPage(true)}
+          onMenuClick={toggleMobileSidebar}
+          isMobileMenuOpen={mobileSidebarOpen}
+          isBlankPage={chatHistory.length === 0} // Add this line
         />
 
-        <main className="flex-1 overflow-y-auto bg-white">
+        {/* Scrollable chat area with padding for input */}
+        <main className="flex-1 overflow-y-auto bg-white pb-32">
           {chatHistory.length === 0 ? (
             <div className="h-full flex flex-col">
               <div className="flex-1 flex items-center justify-center">
@@ -148,7 +170,7 @@ export default function App() {
               </div>
             </div>
           ) : (
-            <div className="pb-20">
+            <div>
               {chatHistory.map((chat, index) => (
                 <ChatMessage
                   key={index}
@@ -173,7 +195,8 @@ export default function App() {
           )}
         </main>
 
-        <div className="fixed bottom-0 left-[260px] right-0 bg-white border-t border-gray-100">
+        {/* Chat input - fixed at bottom with full width */}
+        <div className="absolute bottom-0 left-0 right-0 bg-white border-t border-gray-100 z-10">
           <ChatInput
             value={message}
             onChange={setMessage}

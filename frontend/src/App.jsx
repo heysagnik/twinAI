@@ -3,32 +3,36 @@ import Sidebar from "./components/Sidebar";
 import Header from "./components/Header";
 import ChatInput from "./components/ChatInput";
 import ChatMessage from "./components/ChatMessage";
-import RecommendedAgencies from "./components/RecommendedAgencies";
 import BlankPage from "./components/BlankPage";
+import AuthPage from "./AuthPage";
 
 export default function App() {
   const [message, setMessage] = useState("");
   const [chatHistory, setChatHistory] = useState([]);
   const [loading, setLoading] = useState(false);
   const [typingPrompt, setTypingPrompt] = useState("");
+  const [showAuthPage, setShowAuthPage] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  // Mock data
-  const agencies = [
-    {
-      name: "Craftwork Design Studio",
-      description: "Ten years of crafting polished websites, interfaces & visual designs",
-      logo: "/craftwork-logo.png",
-      bgColor: "bg-[#E9F0FF]"
-    },
-    {
-      name: "Meadow Collective",
-      description: "A multidisciplinary design studio",
-      logo: "/meadow-logo.png",
-      bgColor: "bg-[#FF5C35]",
-      textColor: "text-white"
+  useEffect(() => {
+    // Check if user is authenticated initially
+    checkAuthStatus();
+  }, []);
+
+  const checkAuthStatus = async () => {
+    try {
+      const response = await fetch('http://localhost:3000/auth/status', {
+        credentials: 'include' // include cookies
+      });
+      const data = await response.json();
+      setIsAuthenticated(data.authenticated);
+    } catch (error) {
+      console.error('Error checking auth status:', error);
+      setIsAuthenticated(false);
     }
-  ];
+  };
 
+  // Mock chats data
   const mockChats = {
     today: [
       { id: 1, title: "How do I design interface for my startup?" }
@@ -49,6 +53,19 @@ export default function App() {
   const handleSubmit = async () => {
     if (!message.trim()) return;
 
+    // Check if message needs Google integration
+    if (
+      message.toLowerCase().includes("schedule") || 
+      message.toLowerCase().includes("email") || 
+      message.toLowerCase().includes("calendar")
+    ) {
+      if (!isAuthenticated) {
+        // Show auth page if trying to use Google features without authentication
+        setShowAuthPage(true);
+        return;
+      }
+    }
+
     // Add user message to chat
     const userMessage = { message, isUser: true };
     setChatHistory(prev => [...prev, userMessage]);
@@ -61,6 +78,7 @@ export default function App() {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include', // include cookies
         body: JSON.stringify({ message }),
       });
 
@@ -74,10 +92,23 @@ export default function App() {
     } catch (error) {
       console.error('Error:', error);
       // Handle error appropriately
+      setChatHistory(prev => [...prev, {
+        message: "Sorry, there was an error processing your request. Please try again.",
+        isUser: false
+      }]);
     } finally {
       setLoading(false);
     }
   };
+
+  const handleAuthComplete = (authenticated) => {
+    setIsAuthenticated(authenticated);
+    setShowAuthPage(false);
+  };
+
+  if (showAuthPage) {
+    return <AuthPage onAuthComplete={handleAuthComplete} />;
+  }
 
   return (
     <div className="flex h-screen bg-white">
@@ -89,6 +120,8 @@ export default function App() {
         }}
         chats={mockChats}
         onNewChat={() => setChatHistory([])}
+        onConnectGoogle={() => setShowAuthPage(true)}
+        isAuthenticated={isAuthenticated}
       />
 
       {/* Main Content */}
@@ -97,6 +130,8 @@ export default function App() {
           model="Open AI GPT-4.0"
           onShare={() => {}}
           onReport={() => {}}
+          isAuthenticated={isAuthenticated}
+          onConnectGoogle={() => setShowAuthPage(true)}
         />
 
         <main className="flex-1 overflow-y-auto bg-white">
@@ -104,7 +139,11 @@ export default function App() {
             <div className="h-full flex flex-col">
               <div className="flex-1 flex items-center justify-center">
                 <div className="max-w-3xl w-full px-4">
-                  <BlankPage onSelectPrompt={handleSelectPrompt} />
+                  <BlankPage 
+                    onSelectPrompt={handleSelectPrompt}
+                    isAuthenticated={isAuthenticated}
+                    onConnectGoogle={() => setShowAuthPage(true)}
+                  />
                 </div>
               </div>
             </div>
